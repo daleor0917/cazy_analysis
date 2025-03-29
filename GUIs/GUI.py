@@ -4,9 +4,9 @@
 # Libraries
 
 
-
 import sys
 import os
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.join(project_root, "modules"))
 
@@ -39,11 +39,13 @@ output_file = (
 # Global variable to store blast results
 df_blast = pd.DataFrame()
 
+
 # Define the function to run BLAST
 def run_blast(input_file):
     BLAST = BLASTrunner(verbose=TQ_VERBOSE, tq_cache=TQ_CACHE)
     BLAST.make_blast_db(input_file)
     return BLAST.run_blastp(input_file, database_prefix, output_file)
+
 
 # Defining app
 
@@ -69,24 +71,24 @@ app.layout = html.Div(
                 html.Br(),
                 html.Br(),
                 dcc.Textarea(
-                    id='input_sequence_text',
-                    placeholder='Enter your sequence here...',
-                    style={'width': '100%', 'height': 100}
+                    id="input_sequence_text",
+                    placeholder="Enter your sequence here...",
+                    style={"width": "100%", "height": 100},
                 ),
                 dcc.Upload(
-                    id='upload_external_fasta',
-                    children=html.Button('Upload Sequence File'),
-                    multiple=False
+                    id="upload_external_fasta",
+                    children=html.Button("Upload Sequence File"),
+                    multiple=False,
                 ),
-                html.Div(id='upload_status'),  # New div for upload status
+                html.Div(id="upload_status"),  # New div for upload status
                 html.Br(),
                 html.Br(),
                 html.Button("Load Sequences", id="load_sequences_button"),
-                html.Div(id='output_fasta_status'),  # To show the download status
+                html.Div(id="output_fasta_status"),  # To show the download status
                 html.Br(),
                 html.Br(),
                 html.Button("Blast", id="blast_button"),
-                html.Div(id='blast_status'),  # New div for BLAST status
+                html.Div(id="blast_status"),  # New div for BLAST status
                 html.H3("Filter Options"),
                 dcc.Dropdown(
                     id="seq_dropdown",
@@ -126,10 +128,11 @@ app.layout = html.Div(
     ],
 )
 
+
 # Callback to show upload status
 @app.callback(
-    Output('upload_status', 'children'),
-    Input('upload_external_fasta', 'contents'),
+    Output("upload_status", "children"),
+    Input("upload_external_fasta", "contents"),
     prevent_initial_call=True,
 )
 def show_upload_status(contents):
@@ -137,24 +140,27 @@ def show_upload_status(contents):
         return "uploaded external sequence"
     return ""
 
+
 # Callback to load sequences based on user input
 @app.callback(
     [
-        Output('output_fasta_status', 'children'),
-        Output('seq_dropdown', 'options'),  # Update dropdown options
-        Output('blast_table', 'columns'),  # Update table columns
-        #Output('blast_table', 'data'),  # Update table data
+        Output("output_fasta_status", "children"),
+        Output("seq_dropdown", "options"),  # Update dropdown options
+        Output("blast_table", "columns"),  # Update table columns
+        # Output('blast_table', 'data'),  # Update table data
     ],
-    Input('load_sequences_button', 'n_clicks'),  # Button to load sequences
-    State('cazy_family_dropdown', 'value'),  # Selected CAZy family
-    State('upload_external_fasta', 'contents'),  # Uploaded external sequence
-    State('input_sequence_text', 'value'),  # Text input for sequence
+    Input("load_sequences_button", "n_clicks"),  # Button to load sequences
+    State("cazy_family_dropdown", "value"),  # Selected CAZy family
+    State("upload_external_fasta", "contents"),  # Uploaded external sequence
+    State("input_sequence_text", "value"),  # Text input for sequence
     prevent_initial_call=True,
 )
-def load_sequences(n_clicks, selected_family, external_fasta_contents, input_sequence_text):
+def load_sequences(
+    n_clicks, selected_family, external_fasta_contents, input_sequence_text
+):
     # Check if a CAZy family is selected
     if selected_family is None:
-        return "Please select a CAZy family.", [], []#, []
+        return "Please select a CAZy family.", [], []  # , []
 
     # Initialize the downloader with the selected family and verbosity
     email = "your_email@example.com"  # Change this to your real email
@@ -163,19 +169,23 @@ def load_sequences(n_clicks, selected_family, external_fasta_contents, input_seq
     # Step 1: Obtain FASTA sequences for the selected family
     genbank_ids = downloader.obtener_genbank_ids()
     if not genbank_ids:
-        return "No GenBank IDs found for the selected family.", [], []#, []
+        return "No GenBank IDs found for the selected family.", [], []  # , []
 
     downloader.obtener_fasta_ncbi()
 
     # Step 2: Handle the upload of the external file if provided
     external_fasta_file = None  # Initialize the variable
-    external_sequence_uploaded = False  # Flag to check if an external sequence was uploaded
+    external_sequence_uploaded = (
+        False  # Flag to check if an external sequence was uploaded
+    )
 
     if external_fasta_contents:
-        content_type, content_string = external_fasta_contents.split(',')
+        content_type, content_string = external_fasta_contents.split(",")
         decoded = base64.b64decode(content_string)
-        external_fasta_file = "/workspace/Test_Python_Jupyter/mi_entorno/docs/external_sequences.fasta"
-        
+        external_fasta_file = (
+            "/workspace/Test_Python_Jupyter/mi_entorno/docs/external_sequences.fasta"
+        )
+
         with open(external_fasta_file, "wb") as f:
             f.write(decoded)
 
@@ -183,17 +193,25 @@ def load_sequences(n_clicks, selected_family, external_fasta_contents, input_seq
 
     # Step 3: Handle the text input for sequences
     if input_sequence_text:
-        input_sequence_file = "/workspace/Test_Python_Jupyter/mi_entorno/docs/input_sequence.fasta"
+        input_sequence_file = (
+            "/workspace/Test_Python_Jupyter/mi_entorno/docs/input_sequence.fasta"
+        )
         with open(input_sequence_file, "w") as f:
             f.write(input_sequence_text)
 
-        external_fasta_file = input_sequence_file  # Use the input sequence file as the external file
+        external_fasta_file = (
+            input_sequence_file  # Use the input sequence file as the external file
+        )
         external_sequence_uploaded = True  # Set flag to True
 
     # Step 4: Combine the FASTA files
-    combined_fasta_file = "/workspace/Test_Python_Jupyter/mi_entorno/docs/updated_sequences.fasta"
+    combined_fasta_file = (
+        "/workspace/Test_Python_Jupyter/mi_entorno/docs/updated_sequences.fasta"
+    )
     with open(combined_fasta_file, "w") as outfile:
-        with open("/workspace/Test_Python_Jupyter/mi_entorno/docs/sequences.fasta") as infile:
+        with open(
+            "/workspace/Test_Python_Jupyter/mi_entorno/docs/sequences.fasta"
+        ) as infile:
             outfile.write(infile.read())
             outfile.write("\n")
 
@@ -202,27 +220,34 @@ def load_sequences(n_clicks, selected_family, external_fasta_contents, input_seq
                 outfile.write(infile.read())
                 outfile.write("\n")
 
-    downloader.agregar_secuencia_externa(external_fasta_file, output_file=combined_fasta_file)
+    downloader.agregar_secuencia_externa(
+        external_fasta_file, output_file=combined_fasta_file
+    )
 
     # Step 5: Update dropdown options with new sequences
-    options = [{"label": seq, "value": seq} for seq in downloader.get_loaded_sequences()]
+    options = [
+        {"label": seq, "value": seq} for seq in downloader.get_loaded_sequences()
+    ]
 
     # Show different messages depending on whether an external sequence was uploaded
     status_message = "File/sequence uploaded successfully."
 
-    return status_message, options, []#, []
+    return status_message, options, []  # , []
+
 
 # Callback to run BLAST when the button is clicked
 @app.callback(
-    Output('blast_status', 'children'),  # New output for BLAST status
-    Input('blast_button', 'n_clicks'),  # Button to run BLAST
-    State('upload_external_fasta', 'contents'),  # Uploaded external sequence
-    State('input_sequence_text', 'value'),  # Text input for sequence
+    Output("blast_status", "children"),  # New output for BLAST status
+    Input("blast_button", "n_clicks"),  # Button to run BLAST
+    State("upload_external_fasta", "contents"),  # Uploaded external sequence
+    State("input_sequence_text", "value"),  # Text input for sequence
     prevent_initial_call=True,
 )
 def run_blast_callback(n_clicks, external_fasta_contents, input_sequence_text):
     # Determine the input file to use for BLAST
-    input_file = "/workspace/Test_Python_Jupyter/mi_entorno/docs/updated_sequences.fasta"
+    input_file = (
+        "/workspace/Test_Python_Jupyter/mi_entorno/docs/updated_sequences.fasta"
+    )
 
     # Run BLAST
     df_blast = run_blast(input_file)
@@ -233,11 +258,12 @@ def run_blast_callback(n_clicks, external_fasta_contents, input_sequence_text):
     else:
         return "Error executing BLAST."
 
+
 # Callback para filtrar y actualizar la tabla de resultados de BLAST
 @app.callback(
-    Output('blast_table', 'data'),  # Actualiza los datos de la tabla
-    Input('seq_dropdown', 'value'),  # Secuencias seleccionadas en el dropdown
-    prevent_initial_call=True
+    Output("blast_table", "data"),  # Actualiza los datos de la tabla
+    Input("seq_dropdown", "value"),  # Secuencias seleccionadas en el dropdown
+    prevent_initial_call=True,
 )
 def filter_blast_results(selected_sequences):
     global df_blast  # Usa el DataFrame global con los resultados de BLAST
@@ -255,6 +281,7 @@ def filter_blast_results(selected_sequences):
     ]
 
     return filtered_df.to_dict("records")
+
 
 # Run the app
 if __name__ == "__main__":

@@ -8,8 +8,15 @@ from Bio import Entrez
 
 TQ_VERBOSE = os.getenv("TQ_VERBOSE", "F").lower().startswith("t")
 
+
 class CazyDownloader:
-    def __init__(self, email, familia, output_dir="/workspace/cazy_analysis/output/cazy_sequences", verbose=TQ_VERBOSE):
+    def __init__(
+        self,
+        email,
+        familia,
+        output_dir="/workspace/cazy_analysis/output/cazy_sequences",
+        verbose=TQ_VERBOSE,
+    ):
         """
         Inicializa el downloader con el email para NCBI, la familia de CAZy y el modo verbose.
         """
@@ -61,20 +68,26 @@ class CazyDownloader:
         with open(output_path, "w") as fasta_file:
             for genbank_id in self.genbank_ids:
                 try:
-                    handle = Entrez.efetch(db="protein", id=genbank_id, rettype="fasta", retmode="text")
+                    handle = Entrez.efetch(
+                        db="protein", id=genbank_id, rettype="fasta", retmode="text"
+                    )
                     fasta_sequence = handle.read()
                     handle.close()
-                    
+
                     if fasta_sequence.startswith(">"):
                         fasta_file.write(fasta_sequence + "\n")
-                        self.loaded_sequences.append(fasta_sequence.splitlines()[0][1:])  # Store the sequence ID
+                        self.loaded_sequences.append(
+                            fasta_sequence.splitlines()[0][1:]
+                        )  # Store the sequence ID
                     else:
                         self._print(f"No se encontró la secuencia para {genbank_id}")
 
                 except Exception as e:
                     self._print(f"Error con {genbank_id}: {e}")
 
-    def agregar_secuencia_externa(self, external_fasta_file=None, output_file="updated_sequences.fasta"):
+    def agregar_secuencia_externa(
+        self, external_fasta_file=None, output_file="updated_sequences.fasta"
+    ):
         """
         Agrega una secuencia externa en formato FASTA a las secuencias descargadas.
         Si no se pasa un archivo externo, solo guarda las secuencias de NCBI.
@@ -83,7 +96,9 @@ class CazyDownloader:
             combined_file_path = os.path.join(self.output_dir, output_file)
             with open(combined_file_path, "w") as combined_file:
                 # Escribir las secuencias de NCBI
-                with open(os.path.join(self.output_dir, "sequences.fasta"), "r") as fasta_file:
+                with open(
+                    os.path.join(self.output_dir, "sequences.fasta"), "r"
+                ) as fasta_file:
                     combined_file.write(fasta_file.read())
 
                 # Si no se proporciona un archivo externo, no intentamos agregarlo
@@ -91,9 +106,13 @@ class CazyDownloader:
                     if os.path.exists(external_fasta_file):
                         with open(external_fasta_file, "r") as external_file:
                             combined_file.write(external_file.read())
-                        self._print(f"Secuencia externa añadida desde {external_fasta_file}.")
+                        self._print(
+                            f"Secuencia externa añadida desde {external_fasta_file}."
+                        )
                     else:
-                        self._print(f"No se encontró el archivo externo: {external_fasta_file}")
+                        self._print(
+                            f"No se encontró el archivo externo: {external_fasta_file}"
+                        )
                 else:
                     self._print("No se proporcionó un archivo externo.")
 
@@ -109,16 +128,19 @@ class CazyDownloader:
         """
         return self.loaded_sequences
 
+
 # Ejemplo de uso
 if __name__ == "__main__":
     familia = "GH180"  # Cambiar según la familia deseada
     email = "daleor0917@gmail.com"  # Cambiar por tu email real
-    verbose = os.getenv("TQ_VERBOSE", "F").lower().startswith("t")  # Obtener el estado de verbose
+    verbose = (
+        os.getenv("TQ_VERBOSE", "F").lower().startswith("t")
+    )  # Obtener el estado de verbose
     downloader = CazyDownloader(email, familia, verbose=verbose)
-    
+
     downloader.obtener_genbank_ids()
     downloader.obtener_fasta_ncbi()
-    
+
     # Agregar una secuencia externa
     external_fasta_file = "/workspace/cazy_analysis/input/GH51_short.txt"  # Cambiar por el nombre del archivo externo
     downloader.agregar_secuencia_externa(external_fasta_file)
