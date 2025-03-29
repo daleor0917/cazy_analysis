@@ -1,2 +1,4 @@
 pandas==2.2.3
 biopython==1.85
+dash==2.18.0
+seaborn==0.13.2
