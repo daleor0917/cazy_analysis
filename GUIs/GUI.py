@@ -241,7 +241,6 @@ def load_sequences(
 
     return status_message, options
 
-
 # Callback para ejecutar BLAST cuando se hace clic en el botón
 @app.callback(
     [
@@ -249,21 +248,28 @@ def load_sequences(
         Output("table", "data"),  # Update the DataTable data
         Output("table", "columns"),  # Update the DataTable columns
     ],
-    Input("blast_button", "n_clicks"),
+    [Input("blast_button", "n_clicks"),
+     Input("seq_dropdown", "value")],  # Add dropdown as an input
     State("upload_external_fasta", "contents"),
     State("input_sequence_text", "value"),
     prevent_initial_call=True,
 )
-def run_blast_callback(n_clicks, external_fasta_contents, input_sequence_text):
+def run_blast_callback(n_clicks, selected_sequences, external_fasta_contents, input_sequence_text):
     input_file = "/workspace/cazy_analysis/input/temp/updated_sequences.fasta"
     df_blast = run_blast(input_file)
 
     if df_blast is not None and not df_blast.empty:
-        columns = [{"name": col, "id": col} for col in df_blast.columns]
-        return "BLAST executed successfully.", df_blast.to_dict("records"), columns
+        # Filter the DataFrame based on selected sequences and identity percentage
+        if selected_sequences:
+            # Assuming 'query_id' is the column that contains the sequence IDs
+            filtered_df = df_blast[df_blast['query_id'].isin(selected_sequences) & (df_blast['identity'] > 60)]
+        else:
+            filtered_df = df_blast  # No filtering if no sequences are selected
+
+        columns = [{"name": col, "id": col} for col in filtered_df.columns]
+        return "BLAST executed successfully.", filtered_df.to_dict("records"), columns
     else:
         return "Error executing BLAST.", [], []
-
 
 # Run the app
 if __name__ == "__main__":
