@@ -122,11 +122,26 @@ class CazyDownloader:
         except Exception as e:
             self._print(f"Error al combinar secuencias: {e}")
 
-    def get_loaded_sequences(self):
+    def get_loaded_sequences(self, combined_file_path="/workspace/cazy_analysis/input/temp/updated_sequences.fasta"):
         """
         Devuelve las secuencias cargadas para ser utilizadas en el dropdown.
+        Lee las secuencias del archivo combinado y devuelve solo los IDs.
         """
-        return self.loaded_sequences
+        sequences = []
+
+        # Check if the combined file exists and read from it
+        if os.path.exists(combined_file_path):
+            with open(combined_file_path, "r") as combined_file:
+                for line in combined_file:
+                    if line.startswith(">"):  # Only consider header lines
+                        sequences.append(line.split()[0][1:])  # Get the sequence ID without '>'
+        
+        # If no sequences found in combined file, check the individual sequences
+        if not sequences:
+            for genbank_id in self.genbank_ids:
+                sequences.append(genbank_id)  # Add the GenBank IDs
+
+        return sequences
 
 
 # Ejemplo de uso
