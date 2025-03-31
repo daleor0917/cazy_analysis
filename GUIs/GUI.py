@@ -12,11 +12,14 @@ sys.path.append(os.path.join(project_root, "modules"))
 
 import dash
 from dash import Dash, html, dash_table, Input, Output, State, dcc
+import dash_cytoscape as cyto
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import base64
 from io import BytesIO
+
+from network_builder import NetworkBuilder
 from blastrunner import BLASTrunner
 from cazy_fetcher import CazyDownloader
 
@@ -48,7 +51,6 @@ def run_blast(input_file):
 
     return result
 
-
 # Definición de la aplicación Dash
 app = Dash(__name__)
 
@@ -56,6 +58,7 @@ app = Dash(__name__)
 app.layout = html.Div(
     style={"display": "flex", "height": "100vh"},
     children=[
+        dcc.Store(id='blast_results_store'),
         # Sidebar
         html.Div(
             [
@@ -119,6 +122,23 @@ app.layout = html.Div(
                 ),
                 html.H3("Heatmap of Identity Percentages"),
                 html.Img(id="heatmap", style={"width": "100%"}),
+            ],
+            style={
+                "width": "75%",
+                "padding": "20px",
+                "overflowY": "auto",
+            },
+        ),
+        html.Div(
+            [
+                html.H3("Network Visualization"),
+                cyto.Cytoscape(
+                    id='network-graph',
+                    layout={'name': 'cose'},
+                    style={'width': '100%', 'height': '600px'},
+                    elements=[],  # Initially empty, will be filled later
+                ),
+                html.Button("Generate Network", id="generate_network_button"),
             ],
             style={
                 "width": "75%",
@@ -247,6 +267,7 @@ def load_sequences(
         Output("blast_status", "children"),
         Output("table", "data"),  # Update the DataTable data
         Output("table", "columns"),  # Update the DataTable columns
+        Output("blast_results_store", "data"),  # Store the DataFrame
     ],
     [Input("blast_button", "n_clicks"),
      Input("seq_dropdown", "value")],  # Add dropdown as an input
@@ -267,9 +288,116 @@ def run_blast_callback(n_clicks, selected_sequences, external_fasta_contents, in
             filtered_df = df_blast  # No filtering if no sequences are selected
 
         columns = [{"name": col, "id": col} for col in filtered_df.columns]
-        return "BLAST executed successfully.", filtered_df.to_dict("records"), columns
+        return "BLAST executed successfully.", filtered_df.to_dict("records"), columns, df_blast.to_dict('records')
     else:
-        return "Error executing BLAST.", [], []
+        return "Error executing BLAST.", [], [], []
+
+# Callback to update the heatmap
+@app.callback(
+    Output("heatmap", "src"),
+    [Input("table", "data")],  # Use the DataTable data as input
+    State("blast_results_store", "data"),  # Get the stored DataFrame
+    prevent_initial_call=True,
+)
+def update_heatmap(filtered_data, blast_results):
+    if not filtered_data or blast_results is None or len(blast_results) == 0:
+        return ""  # Ocultar el gráfico si no hay datos
+
+    # Convertir de nuevo a un DataFrame
+    filtered_df = pd.DataFrame(filtered_data)
+
+    if filtered_df.empty:
+        return ""
+
+    # Obtener solo las secuencias que están en la tabla filtrada
+    selected_queries = filtered_df["query_id"].unique()
+    selected_subjects = filtered_df["subject_id"].unique()
+
+    # Filtrar el dataframe original (blast_results) pero manteniendo todas las identidades
+    heatmap_df = pd.DataFrame(blast_results)[
+        pd.DataFrame(blast_results)["query_id"].isin(selected_queries) & 
+        pd.DataFrame(blast_results)["subject_id"].isin(selected_subjects)
+    ]
+
+    # Crear la tabla pivote con valores reales de identidad
+    pivot_df = heatmap_df.pivot_table(
+        index="query_id", columns="subject_id", values="identity", aggfunc="mean"
+    ).fillna(0)  # Aquí podrías usar fillna con otro valor si prefieres
+
+    # Configurar el estilo de Seaborn
+    sns.set(font_scale=1)
+    plt.figure(figsize=(15, 8))
+
+    # Crear un colormap personalizado (rojo a verde)
+    cmap_custom = sns.diverging_palette(10, 150, sep=80, n=256, as_cmap=True)
+
+    # Crear el heatmap con Seaborn
+    heatmap = sns.heatmap(pivot_df, annot=True, fmt=".1f", cmap=cmap_custom, cbar_kws={'label': 'Porcentaje de Identidad'})
+
+    # Rotar los nombres en el eje x (horizontal)
+    heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=90)
+
+    # Mover los nombres de las proteínas a la parte superior del gráfico
+    plt.tick_params(axis='x', which='both', bottom=False, top=True, labelbottom=False, labeltop=True)
+
+    # Poner los nombres de las proteínas en cursiva
+    for tick in heatmap.get_yticklabels():
+        tick.set_fontstyle("italic")
+    for tick in heatmap.get_xticklabels():
+        tick.set_fontstyle("italic")
+
+    # Guardar el heatmap en un buffer
+    buf = BytesIO()
+    plt.savefig(buf, format="png", dpi=300, bbox_inches='tight')
+    plt.close()
+    buf.seek(0)
+
+    # Codificar la imagen en base64
+    encoded_image = base64.b64encode(buf.read()).decode('utf-8')
+
+    return f"data:image/png;base64,{encoded_image}"
+
+
+# Callback to generate the network
+@app.callback(
+    Output("network-graph", "elements"),
+    Input("generate_network_button", "n_clicks"),
+    State("blast_results_store", "data"),
+    State("seq_dropdown", "value"),
+    prevent_initial_call=True,
+)
+def generate_network(n_clicks, blast_results, selected_sequences):
+    if blast_results is None or len(blast_results) == 0:
+        return []  # No results to display
+
+    # Convert to DataFrame
+    df_blast = pd.DataFrame(blast_results)
+
+    if selected_sequences:
+        # Filter the DataFrame based on selected sequences
+        df_blast = df_blast[df_blast['query_id'].isin(selected_sequences)]
+
+    # Create an instance of NetworkBuilder
+    nb = NetworkBuilder()
+
+    # Analyze the results
+    analyzed_df = nb.analyze_blast_results(df_blast)
+
+    # Build the network
+    network = nb.build_network(analyzed_df, threshold=60)
+
+    # Prepare elements for Cytoscape
+    elements = []
+    for node in network.nodes():
+        elements.append({'data': {'id': node, 'label': node}})
+
+    for edge in network.edges(data=True):
+        query, subject, data = edge
+        weight = data.get("weight", 1)
+        elements.append({'data': {'source': query, 'target': subject, 'weight': weight}})
+
+    return elements
+
 
 # Run the app
 if __name__ == "__main__":
