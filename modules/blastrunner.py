@@ -92,8 +92,10 @@ class BLASTrunner:
             "-out",
             output_file,
             "-outfmt",
-            "6",  # Formato tabular
+            "6",
+            "-evalue", "1",
         ]
+
         result = subprocess.run(command, capture_output=True, text=True)
 
         if result.returncode == 0:
@@ -123,21 +125,25 @@ class BLASTrunner:
             blast_df = pd.read_csv(
                 output_file, sep="\t", header=None, names=column_names
             )
-            # Guardar el DataFrame en el archivo de salida
-            blast_df.to_csv(
+
+            # Filtrar para quedarse solo con el resultado más significativo (menor e_value) por combinación de query_id y subject_id
+            best_hits = blast_df.loc[blast_df.groupby(['query_id', 'subject_id'])['e_value'].idxmin()]
+
+            # Guardar el DataFrame filtrado en el archivo de salida
+            best_hits.to_csv(
                 output_file, sep="\t", index=False
             )  # Guardar el DataFrame en el mismo archivo
         except Exception as e:
             print(f"Error reading BLASTP output file: {e}")
             return None
 
-        return blast_df
+        return best_hits
 
 
 if __name__ == "__main__":
     BLAST = BLASTrunner(verbose=TQ_VERBOSE)
 
-    input_file = "/workspace/cazy_analysis/input/GH51_short.txt"
+    input_file = "/workspace/cazy_analysis/input/5_seq.txt"
     database_prefix = "/workspace/cazy_analysis/output/data_base/mi_base_de_datos"
     output_file = "/workspace/cazy_analysis/output/blast_output/blast_results.txt"
 

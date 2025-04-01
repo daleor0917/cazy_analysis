@@ -41,7 +41,7 @@ class NetworkBuilder:
         result_df = df[["query_id", "subject_id", "identity"]]
         return result_df
 
-    def build_network(self, result_df, threshold=75):
+    def build_network(self, result_df, threshold=30):
         """
         Construye un grafo a partir de los resultados de BLAST.
 
@@ -56,7 +56,7 @@ class NetworkBuilder:
             subject = row["subject_id"]
             identity = row["identity"]
 
-            if identity >= threshold:
+            if query != subject and identity >= threshold:
                 G.add_edge(query, subject, weight=identity)
 
         return G
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     analyzed_df = nb.analyze_blast_results(df_results)
 
     # Construir la red
-    network = nb.build_network(analyzed_df, threshold=75)
+    network = nb.build_network(analyzed_df, threshold=60)
 
     print(f"Número de nodos: {network.number_of_nodes()}")
     print(f"Número de enlaces: {network.number_of_edges()}")

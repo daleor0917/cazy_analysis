@@ -86,9 +86,9 @@ app.layout = html.Div(
                 ),
                 html.Div(id="upload_status"),  # New div for upload status
                 html.Br(),
-                html.Br(),
                 html.Button("Load Sequences", id="load_sequences_button"),
                 html.Div(id="output_fasta_status"),  # To show the download status
+                html.Br(),
                 html.Br(),
                 html.Br(),
                 html.Button("Blast", id="blast_button"),
@@ -100,6 +100,9 @@ app.layout = html.Div(
                     placeholder="Choose a protein",
                     multi=True,
                 ),
+                html.Br(),
+                html.Br(),
+                html.Button("Generate Network", id="generate_network_button"),
             ],
             style={
                 "width": "25%",
@@ -137,8 +140,16 @@ app.layout = html.Div(
                     layout={'name': 'cose'},
                     style={'width': '100%', 'height': '600px'},
                     elements=[],  # Initially empty, will be filled later
+                        stylesheet=[
+        {
+            'selector': 'node',
+            'style': {
+                'background-color': 'data(color)',  # Use the color from the data
+                'label': 'data(label)',
+            }
+        },
+    ],
                 ),
-                html.Button("Generate Network", id="generate_network_button"),
             ],
             style={
                 "width": "75%",
@@ -328,14 +339,11 @@ def update_heatmap(filtered_data, blast_results):
     sns.set(font_scale=1)
     plt.figure(figsize=(15, 8))
 
-    # Crear un colormap personalizado (rojo a verde)
-    cmap_custom = sns.diverging_palette(10, 150, sep=80, n=256, as_cmap=True)
-
-    # Crear el heatmap con Seaborn
-    heatmap = sns.heatmap(pivot_df, annot=True, fmt=".1f", cmap=cmap_custom, cbar_kws={'label': 'Porcentaje de Identidad'})
+    # Crear el heatmap con Seaborn usando el colormap "Greens"
+    heatmap = sns.heatmap(pivot_df, annot=True, fmt=".1f", cmap="Greens", cbar_kws={'label': 'Porcentaje de Identidad'})
 
     # Rotar los nombres en el eje x (horizontal)
-    heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=90)
+    heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=45)
 
     # Mover los nombres de las proteínas a la parte superior del gráfico
     plt.tick_params(axis='x', which='both', bottom=False, top=True, labelbottom=False, labeltop=True)
@@ -388,8 +396,13 @@ def generate_network(n_clicks, blast_results, selected_sequences):
 
     # Prepare elements for Cytoscape
     elements = []
+    selected_color = "#006400"  # Color for selected sequences
+    unselected_color = "#98fb98"  # Color for unselected sequences
+
     for node in network.nodes():
-        elements.append({'data': {'id': node, 'label': node}})
+        # Check if the node is in the selected sequences
+        color = selected_color if node in selected_sequences else unselected_color
+        elements.append({'data': {'id': node, 'label': node, 'color': color}})
 
     for edge in network.edges(data=True):
         query, subject, data = edge
