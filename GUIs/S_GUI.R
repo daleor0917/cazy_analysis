@@ -1,58 +1,65 @@
 library(shiny)
 library(reticulate)
-library(DT)  # For displaying DataFrames as tables
+library(DT)
+library(ggplot2)
+library(reshape2)
 
-# Configure Python (adjust the path if using a virtual environment)
 use_python("/usr/bin/python3")
 
 # Import Python modules
 cazyfetcher <- import_from_path("cazy_fetcher", path="/workspace/cazy_analysis/modules")
+blastrunner <- import_from_path("blastrunner", path="/workspace/cazy_analysis/modules")
 
-
-# Define available families
 families <- c("GH8", "GH51", "GH180")
 
-# UI: User interface
 ui <- fluidPage(
-    titlePanel("Cazy Family BLAST"),
+    tags$head(
+        tags$style(HTML("
+            body {
+                overflow-y: hidden;
+            }
+            .dataTables_wrapper .dataTables_paginate {
+                float: right;
+            }
+            .shiny-output-error {
+                color: red;
+            }
+        "))
+    ),
     sidebarLayout(
         sidebarPanel(
             selectInput("familia", "Choose a CAZy Family", choices = families),
             actionButton("fetch_sequences", "Fetch Sequences"),
+            textOutput("fetch_message"),
             textAreaInput("external_sequences", "Enter External Sequences (FASTA format)", rows = 5, placeholder = ">seq1\nATGC...\n>seq2\nATGCG..."),
             actionButton("add_external_sequences", "Add External Sequences"),
             fileInput("external_file", "Upload External Sequences File (FASTA format)", accept = c(".fasta", ".fa")),
-            textOutput("fetch_message")  # Success message
+            actionButton("run_blast", "Run BLAST")
         ),
         mainPanel(
-            verbatimTextOutput("fetch_output"),
+            fluidRow(
+                column(12, DT::dataTableOutput("blast_results_table")),
+                column(12, plotOutput("heatmap", height = "300px"))
+            )
         )
     )
 )
 
-# Server: Application logic
 server <- function(input, output, session) {
     downloader <- NULL
-    cazy_sequences_file <- "/workspace/cazy_analysis/output/cazy_sequences/sequences.fasta"  # Updated path
-    combined_sequences_file <- "/workspace/cazy_analysis/output/cazy_sequences/updated_sequences.fasta"  # Updated path
+    cazy_sequences_file <- "/workspace/cazy_analysis/output/cazy_sequences/sequences.fasta"
+    combined_sequences_file <- "/workspace/cazy_analysis/output/cazy_sequences/updated_sequences.fasta"
+    blast_results <- reactiveVal(NULL)
 
     observeEvent(input$fetch_sequences, {
-        output$fetch_message <- renderText({  # Success message
+        output$fetch_message <- renderText({
             tryCatch({
                 downloader <<- cazyfetcher$CazyDownloader(email = "your_email@example.com", familia = input$familia, verbose = TRUE)
                 downloader$obtener_genbank_ids()
-                downloader$obtener_fasta_ncbi()  # This writes to the file but may return NULL
-
-                # Read the sequences from the file
+                downloader$obtener_fasta_ncbi()
                 sequences <- readLines(cazy_sequences_file)
-
-                # Check if sequences were read successfully
-                if (length(sequences) == 0) {
-                    stop("Error: No sequences were retrieved from the file.")
-                }
-
-                # Write the sequences to the output file
-                writeLines(sequences, cazy_sequences_file)  # Save to the specified path
+                if (length(sequences) == 0) stop("Error: No sequences were retrieved from the file.")
+                writeLines(sequences, cazy_sequences_file)
                 paste("CAZy sequences successfully fetched for the family:", input$familia)
             }, error = function(e) {
                 paste("Error:", e$message)
@@ -60,40 +67,80 @@ server <- function(input, output, session) {
         })
     })
 
-    
     observeEvent(input$add_external_sequences, {
         req(downloader)
         external_sequences <- input$external_sequences
-        
-        # Debugging: Print the external sequences to check the input
-        print(external_sequences)
-        
         if (nzchar(external_sequences)) {
-            # Check if the input is in the correct FASTA format for amino acids
             if (grepl("^>.*\\n([ACDEFGHIKLMNPQRSTVWY\n]+)$", external_sequences)) {
-                # Write the external sequences to a temporary file
                 temp_external_file <- tempfile(fileext = ".fasta")
                 writeLines(external_sequences, temp_external_file)
-                
-                # Call the method to add external sequences
                 downloader$agregar_secuencia_externa(external_fasta_file = temp_external_file)
-                output$fetch_message <- renderText({"External sequences added successfully."})  # Success message
+                output$fetch_message <- renderText({"External sequences added successfully."})
             } else {
-                output$fetch_message <- renderText({"Error: The input is not in valid FASTA format."})  # Error message
+                output$fetch_message <- renderText({"Error: The input is not in valid FASTA format."})
             }
         } else {
-            output$fetch_message <- renderText({"Error: No sequences provided."})  # Error message
+            output$fetch_message <- renderText({"Error: No sequences provided."})
         }
     })
+
     observeEvent(input$external_file, {
         req(downloader)
         external_file_path <- input$external_file$datapath
         downloader$agregar_secuencia_externa(external_fasta_file = external_file_path)
-        output$fetch_message <- renderText({"External sequences from the file added successfully."})  # Success message
+        output$fetch_message <- renderText({"External sequences from the file added successfully."})
     })
-    
 
+    observeEvent(input$run_blast, {
+        req(downloader)
+        input_file <- if (is.null(input$external_file)) {
+            cazy_sequences_file
+        } else {
+            combined_sequences_file
+        }
+
+        blast_instance <- blastrunner$BLASTrunner(verbose = TRUE)
+        blast_instance$make_blast_db(input_file)
+        output_file <- "/workspace/cazy_analysis/output/blast_output/blast_results.txt"
+        database_prefix <- "/workspace/cazy_analysis/output/data_base/mi_base_de_datos"
+        blast_results_data <- blast_instance$run_blastp(input_file, database_prefix, output_file)
+
+        if (!is.null(blast_results_data)) {
+            output$fetch_message <- renderText({"BLAST completed successfully. Results saved."})
+            blast_results(blast_results_data)
+            output$blast_results_table <- DT::renderDataTable({
+                DT::datatable(blast_results(), options = list(pageLength = 5, scrollY = FALSE))
+            })
+        } else {
+            output$fetch_message <- renderText({"Error running BLAST."})
+        }
+    })
+
+    output$heatmap <- renderPlot({
+        req(blast_results())
+        df <- as.data.frame(blast_results())
+        colnames(df) <- gsub(" ", "_", tolower(colnames(df)))
+        if (!all(c("query_id", "subject_id", "identity") %in% colnames(df))) return(NULL)
+        df_identity <- df[, c("query_id", "subject_id", "identity")]
+        identity_matrix <- reshape2::dcast(df_identity, query_id ~ subject_id, value.var = "identity", fill = 0)
+        identity_long <- reshape2::melt(identity_matrix, id.vars = "query_id")
+
+        ggplot(identity_long, aes(x = variable, y = query_id, fill = value)) +
+            geom_tile(color = "white") +
+            geom_text(aes(label = sprintf("%.1f", value)), size = 3) +
+            scale_fill_gradient(low = "#e5f5e0", high = "#238b45", name = "Porcentaje de Identidad") +
+            labs(title = "BLAST Identity Heatmap", x = "Subject", y = "Query") +
+            theme_minimal(base_size = 12) +
+            theme(
+                axis.text.x = element_text(angle = 45, hjust = 0, vjust = 0.5, face = "italic"),
+                axis.text.y = element_text(face = "italic"),
+                axis.ticks = element_blank(),
+                panel.grid = element_blank(),
+                plot.title = element_text(hjust = 0.5)
+            ) +
+            scale_x_discrete(position = "top")
+    })
 }
 
-# Run the app
+
 shinyApp(ui = ui, server = server)
