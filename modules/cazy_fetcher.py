@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+import re
 import requests
 from bs4 import BeautifulSoup
 from Bio import Entrez
@@ -37,27 +38,33 @@ class CazyDownloader:
 
     def obtener_genbank_ids(self):
         """
-        Obtiene los identificadores GenBank de una página de familia en CAZy.
+        Obtiene los identificadores GenBank de una página de familia caracterizada en CAZy.
+        Extrae solo el primer ID válido usando expresiones regulares.
         """
-        url = f"https://www.cazy.org/{self.familia}_all.html"
+        url = f"https://www.cazy.org/{self.familia}_characterized.html"
         response = requests.get(url)
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # Flag to skip the header row
         header_skipped = False
 
         for row in soup.find_all("tr"):
             cols = row.find_all("td")
-            if len(cols) > 3:  # GenBank ID está en la 4ta columna
-                genbank_id = cols[3].text.strip()
-                if genbank_id:
-                    # Skip the header row
-                    if not header_skipped and genbank_id == "GenBank":
+            if len(cols) > 4:  # GenBank ID está en la 4ta columna
+                genbank_text = cols[4].text.strip()
+                if genbank_text:
+                    if not header_skipped and genbank_text == "GenBank":
                         header_skipped = True
                         continue
-                    self.genbank_ids.append(genbank_id)
+
+                    # Buscar todos los IDs válidos en el texto
+                    valid_ids = re.findall(r'[A-Z_]+\d+\.\d+', genbank_text)
+                    if valid_ids:
+                        first_valid_id = valid_ids[0]
+                        if first_valid_id not in self.genbank_ids:
+                            self.genbank_ids.append(first_valid_id)
 
         self._print(f"GenBank IDs obtenidos: {self.genbank_ids}")
+        self._print(f"GenBank IDs obtenidos ({len(self.genbank_ids)}): {self.genbank_ids}")
         return self.genbank_ids
 
     def obtener_fasta_ncbi(self, output_file="sequences.fasta"):
@@ -146,7 +153,7 @@ class CazyDownloader:
 
 # Ejemplo de uso
 if __name__ == "__main__":
-    familia = "GH180"  # Cambiar según la familia deseada
+    familia = "GH44"  # Cambiar según la familia deseada
     email = "daleor0917@gmail.com"  # Cambiar por tu email real
     verbose = (
         os.getenv("TQ_VERBOSE", "F").lower().startswith("t")

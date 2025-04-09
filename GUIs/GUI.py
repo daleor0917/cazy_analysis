@@ -12,6 +12,7 @@ sys.path.append(os.path.join(project_root, "modules"))
 
 import dash
 from dash import Dash, html, dash_table, Input, Output, State, dcc
+import dash_bootstrap_components as dbc
 import dash_cytoscape as cyto
 import pandas as pd
 import seaborn as sns
@@ -22,6 +23,10 @@ from io import BytesIO
 from network_builder import NetworkBuilder
 from blastrunner import BLASTrunner
 from cazy_fetcher import CazyDownloader
+
+from layout_components.sidebar import sidebar_col
+from layout_components.main_components import main_components_col
+
 
 # Constants
 
@@ -37,133 +42,35 @@ output_file = "/workspace/cazy_analysis/output/blast_output/blast_results.txt"
 
 # Functions
 
-
-# Global variable to store blast results
-# df_blast = pd.DataFrame()
 # Define the function to run BLAST
 def run_blast(input_file):
     BLAST = BLASTrunner(verbose=TQ_VERBOSE)
     BLAST.make_blast_db(input_file)
     result = BLAST.run_blastp(input_file, database_prefix, output_file)
 
-    # print("BLAST Result:", result)  # Verifica la salida
-    # print("Type:", type(result))  # ¿Es un DataFrame?
-
     return result
 
 # Definición de la aplicación Dash
-app = Dash(__name__)
-
+app = Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.SANDSTONE]
+)
 # Layout de la aplicación
 app.layout = html.Div(
     style={"display": "flex", "height": "100vh"},
     children=[
         dcc.Store(id='blast_results_store'),
         # Sidebar
-        html.Div(
-            [
-                html.H3("CAZy Family"),
-                dcc.Dropdown(
-                    id="cazy_family_dropdown",
-                    options=[
-                        {"label": "GH180", "value": "GH180"},
-                        {"label": "GH51", "value": "GH51"},
-                        # Add more families as needed
-                    ],
-                    placeholder="Select a CAZy family",
-                ),
-                html.Br(),
-                html.Br(),
-                dcc.Textarea(
-                    id="input_sequence_text",
-                    placeholder="Enter your sequence here...",
-                    style={"width": "100%", "height": 100},
-                ),
-                dcc.Upload(
-                    id="upload_external_fasta",
-                    children=html.Button("Upload Sequence File"),
-                    multiple=False,
-                ),
-                html.Div(id="upload_status"),  # New div for upload status
-                html.Br(),
-                html.Button("Load Sequences", id="load_sequences_button"),
-                html.Div(id="output_fasta_status"),  # To show the download status
-                html.Br(),
-                html.Br(),
-                html.Br(),
-                html.Button("Blast", id="blast_button"),
-                html.Div(id="blast_status"),  # New div for BLAST status
-                html.H3("Filter Options"),
-                dcc.Dropdown(
-                    id="seq_dropdown",
-                    options=[],  # Initially empty, will be filled later
-                    placeholder="Choose a protein",
-                    multi=True,
-                ),
-                html.Br(),
-                html.Br(),
-                html.Button("Generate Network", id="generate_network_button"),
-            ],
-            style={
-                "width": "25%",
-                "padding": "20px",
-                "backgroundColor": "#f8f9fa",
-                "height": "100vh",
-                "boxShadow": "2px 0px 5px rgba(0,0,0,0.1)",
-            },
-        ),
+        sidebar_col,
         # Table + Heatmap Container
-        html.Div(
-            [
-                html.H3("BLAST Results"),
-                dash_table.DataTable(
-                    id="table",
-                    columns=[],
-                    data=[],  # Initially empty, will be filled with the callback
-                    style_table={'overflowX': 'auto'},
-                    page_size=10,
-                ),
-                html.H3("Heatmap of Identity Percentages"),
-                html.Img(id="heatmap", style={"width": "100%"}),
-            ],
-            style={
-                "width": "75%",
-                "padding": "20px",
-                "overflowY": "auto",
-            },
-        ),
-        html.Div(
-            [
-                html.H3("Network Visualization"),
-                cyto.Cytoscape(
-                    id='network-graph',
-                    layout={'name': 'cose'},
-                    style={'width': '100%', 'height': '600px'},
-                    elements=[],  # Initially empty, will be filled later
-                        stylesheet=[
-        {
-            'selector': 'node',
-            'style': {
-                'background-color': 'data(color)',  # Use the color from the data
-                'label': 'data(label)',
-            }
-        },
-    ],
-                ),
-            ],
-            style={
-                "width": "75%",
-                "padding": "20px",
-                "overflowY": "auto",
-            },
-        ),
+        main_components_col,
     ],
 )
 
 
 # Callback to show upload status
 @app.callback(
-    Output("upload_status", "children"),
+    Output("upload_status", "children"),    
     Input("upload_external_fasta", "contents"),
     prevent_initial_call=True,
 )
@@ -272,7 +179,6 @@ def load_sequences(
 
     return status_message, options
 
-# Callback para ejecutar BLAST cuando se hace clic en el botón
 @app.callback(
     [
         Output("blast_status", "children"),
@@ -288,20 +194,42 @@ def load_sequences(
 )
 def run_blast_callback(n_clicks, selected_sequences, external_fasta_contents, input_sequence_text):
     input_file = "/workspace/cazy_analysis/input/temp/updated_sequences.fasta"
+    output_file = "/workspace/cazy_analysis/output/blast_output/blast_results.txt"
+
+    # Intenta ejecutar el BLAST
     df_blast = run_blast(input_file)
 
+    # Si el BLAST se ejecutó y hay resultados
     if df_blast is not None and not df_blast.empty:
-        # Filter the DataFrame based on selected sequences and identity percentage
+        # Filtrar el DataFrame basado en las secuencias seleccionadas y el porcentaje de identidad
         if selected_sequences:
-            # Assuming 'query_id' is the column that contains the sequence IDs
             filtered_df = df_blast[df_blast['query_id'].isin(selected_sequences) & (df_blast['identity'] > 60)]
         else:
-            filtered_df = df_blast  # No filtering if no sequences are selected
+            filtered_df = df_blast  # No filtrar si no se seleccionan secuencias
 
         columns = [{"name": col, "id": col} for col in filtered_df.columns]
         return "BLAST executed successfully.", filtered_df.to_dict("records"), columns, df_blast.to_dict('records')
-    else:
-        return "Error executing BLAST.", [], [], []
+
+    # Si el BLAST no se ejecutó, intenta cargar los resultados desde el archivo
+    try:
+        # Cargar el DataFrame desde el archivo de salida de BLAST
+        df_blast = pd.read_csv(output_file, sep="\t")
+
+        # Filtrar el DataFrame basado en las secuencias seleccionadas y el porcentaje de identidad
+        if selected_sequences:
+            filtered_df = df_blast[df_blast['query_id'].isin(selected_sequences) & (df_blast['identity'] > 60)]
+        else:
+            filtered_df = df_blast  # No filtrar si no se seleccionan secuencias
+
+        columns = [{"name": col, "id": col} for col in filtered_df.columns]
+        return "No new sequences to BLAST, displaying previous results.", filtered_df.to_dict("records"), columns, df_blast.to_dict('records')
+
+    except FileNotFoundError:
+        return "Error: BLAST results file not found.", [], [], []
+    except Exception as e:
+        return f"Error loading previous results: {str(e)}", [], [], []
+
+
 
 # Callback to update the heatmap
 @app.callback(
@@ -312,55 +240,57 @@ def run_blast_callback(n_clicks, selected_sequences, external_fasta_contents, in
 )
 def update_heatmap(filtered_data, blast_results):
     if not filtered_data or blast_results is None or len(blast_results) == 0:
-        return ""  # Ocultar el gráfico si no hay datos
+        return ""  # Hide the graph if there is no data
 
-    # Convertir de nuevo a un DataFrame
+    # Convert to DataFrame
     filtered_df = pd.DataFrame(filtered_data)
 
     if filtered_df.empty:
         return ""
 
-    # Obtener solo las secuencias que están en la tabla filtrada
+    # Get unique queries and subjects
     selected_queries = filtered_df["query_id"].unique()
     selected_subjects = filtered_df["subject_id"].unique()
 
-    # Filtrar el dataframe original (blast_results) pero manteniendo todas las identidades
+    # Filter the original DataFrame
     heatmap_df = pd.DataFrame(blast_results)[
         pd.DataFrame(blast_results)["query_id"].isin(selected_queries) & 
         pd.DataFrame(blast_results)["subject_id"].isin(selected_subjects)
     ]
 
-    # Crear la tabla pivote con valores reales de identidad
+    # Create pivot table
     pivot_df = heatmap_df.pivot_table(
         index="query_id", columns="subject_id", values="identity", aggfunc="mean"
-    ).fillna(0)  # Aquí podrías usar fillna con otro valor si prefieres
+    ).fillna(0)
 
-    # Configurar el estilo de Seaborn
-    sns.set(font_scale=1)
-    plt.figure(figsize=(15, 8))
+    # Set figure size dynamically based on the number of unique queries and subjects
+    plt.figure(figsize=(max(10, len(selected_subjects) * 0.5), max(6, len(selected_queries) * 0.5)))
 
-    # Crear el heatmap con Seaborn usando el colormap "Greens"
+    # Create the heatmap
     heatmap = sns.heatmap(pivot_df, annot=True, fmt=".1f", cmap="Greens", cbar_kws={'label': 'Porcentaje de Identidad'})
 
-    # Rotar los nombres en el eje x (horizontal)
+    # Rotate x-axis labels
     heatmap.set_xticklabels(heatmap.get_xticklabels(), rotation=45)
 
-    # Mover los nombres de las proteínas a la parte superior del gráfico
+    # Move protein names to the top
     plt.tick_params(axis='x', which='both', bottom=False, top=True, labelbottom=False, labeltop=True)
 
-    # Poner los nombres de las proteínas en cursiva
+    # Italicize protein names
     for tick in heatmap.get_yticklabels():
         tick.set_fontstyle("italic")
     for tick in heatmap.get_xticklabels():
         tick.set_fontstyle("italic")
 
-    # Guardar el heatmap en un buffer
+    # Adjust layout
+    plt.tight_layout()
+
+    # Save the heatmap to a buffer
     buf = BytesIO()
     plt.savefig(buf, format="png", dpi=300, bbox_inches='tight')
     plt.close()
     buf.seek(0)
 
-    # Codificar la imagen en base64
+    # Encode the image in base64
     encoded_image = base64.b64encode(buf.read()).decode('utf-8')
 
     return f"data:image/png;base64,{encoded_image}"
