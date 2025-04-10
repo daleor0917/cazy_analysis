@@ -5,6 +5,7 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc
 
 
+# Sidebar Component
 sidebar_col = dbc.Col(
     [
         html.Br(),
@@ -31,9 +32,7 @@ sidebar_col = dbc.Col(
                                 dbc.Textarea(
                                     id="input_sequence_text",
                                     placeholder="Enter your sequence here...",
-                                    style={
-                                        "height": "100px",
-                                    },
+                                    style={"height": "60px"},  # Further reduced height
                                     className="mb-2",
                                 ),
                             ]
@@ -51,14 +50,11 @@ sidebar_col = dbc.Col(
                                             dcc.Upload(
                                                 id="upload_external_fasta",
                                                 children=dbc.Button(
-                                                    "Choose File", color="secondary"
+                                                    "Choose File", color="secondary", size="sm"  # Smaller button
                                                 ),
                                                 multiple=False,
                                             ),
-                                            style={
-                                                "display": "inline-block",
-                                                "marginLeft": "10px",
-                                            },
+                                            style={"display": "inline-block", "marginLeft": "10px"},
                                         ),
                                     ],
                                     className="d-flex align-items-center",
@@ -71,12 +67,13 @@ sidebar_col = dbc.Col(
                             "Load Sequences",
                             id="load_sequences_button",
                             color="primary",
-                            className="mt-3",
+                            className="mt-2",  # Reduced margin
+                            size="sm"  # Smaller button
                         ),
                         html.Div(id="output_fasta_status", className="mt-2"),
                         html.Hr(),
                         dbc.Button(
-                            "Blast", id="blast_button", color="danger", className="mt-3"
+                            "Blast", id="blast_button", color="danger", className="mt-2", size="sm"  # Smaller button
                         ),
                         html.Div(id="blast_status", className="mt-2"),
                     ]
@@ -85,7 +82,6 @@ sidebar_col = dbc.Col(
             className="mb-4",
             style={"boxShadow": "0 0 8px rgba(0, 0, 0, 0.1)", "padding": "10px"},
         ),
-        html.Br(),
         html.Br(),
         dbc.Card(
             [
@@ -103,7 +99,8 @@ sidebar_col = dbc.Col(
                             "Generate Network",
                             id="generate_network_button",
                             color="success",
-                            className="mt-3",
+                            className="mt-2",  # Reduced margin
+                            size="sm"  # Smaller button
                         ),
                     ]
                 )
@@ -117,7 +114,7 @@ sidebar_col = dbc.Col(
     ],
     width=3,
     style={
-        "padding": "20px",
+        "padding": "10px",  # Reduced padding
         "backgroundColor": "#f8f9fa",
         "resize": "horizontal",
         "min-width": "300px",
@@ -126,3 +123,4 @@ sidebar_col = dbc.Col(
         "overflowY": "auto",
     },
 )
+

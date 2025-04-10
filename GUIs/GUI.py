@@ -55,15 +55,19 @@ app = Dash(
     __name__,
     external_stylesheets=[dbc.themes.SANDSTONE]
 )
+
 # Layout de la aplicación
-app.layout = html.Div(
-    style={"display": "flex", "height": "100vh"},
+app.layout = dbc.Container(
+    fluid=True,
+    style={"height": "100vh", "fontSize": "12px"},
     children=[
         dcc.Store(id='blast_results_store'),
-        # Sidebar
-        sidebar_col,
-        # Table + Heatmap Container
-        main_components_col,
+        dbc.Row(
+            [
+                sidebar_col,
+                main_components_col,
+            ]
+        ),
     ],
 )
 
@@ -84,98 +88,76 @@ def show_upload_status(contents):
 @app.callback(
     [
         Output("output_fasta_status", "children"),
-        Output("seq_dropdown", "options"),  # Update dropdown options
+        Output("seq_dropdown", "options"),
     ],
-    Input("load_sequences_button", "n_clicks"),  # Button to load sequences
-    State("cazy_family_dropdown", "value"),  # Selected CAZy family
-    State("upload_external_fasta", "contents"),  # Uploaded external sequence
-    State("input_sequence_text", "value"),  # Text input for sequence
+    Input("load_sequences_button", "n_clicks"),
+    State("cazy_family_dropdown", "value"),
+    State("upload_external_fasta", "contents"),
+    State("input_sequence_text", "value"),
     prevent_initial_call=True,
 )
-def load_sequences(
-    n_clicks, selected_family, external_fasta_contents, input_sequence_text
-):
-
-    if selected_family is None:
+def load_sequences(n_clicks, selected_family, external_fasta_contents, input_sequence_text):
+    if not selected_family:
         return "Please select a CAZy family.", []
 
-    email = "your_email@example.com"  # Change this to your real email
+    email = "your_email@example.com"  # Cambiar por un correo válido
     downloader = CazyDownloader(email, selected_family, verbose=TQ_VERBOSE)
 
-    # Step 1: Obtain FASTA sequences for the selected family
+    # Rutas de archivos temporales
+    temp_dir = "/workspace/cazy_analysis/input/temp/"
+    os.makedirs(temp_dir, exist_ok=True)
+    fasta_family = os.path.join(temp_dir, "family_sequences.fasta")
+    fasta_external = os.path.join(temp_dir, "external_sequences.fasta")
+    fasta_input = os.path.join(temp_dir, "input_sequence.fasta")
+    fasta_combined = os.path.join(temp_dir, "updated_sequences.fasta")
+
+    # Paso 1: Descargar secuencias de la familia
     genbank_ids = downloader.obtener_genbank_ids()
     if not genbank_ids:
         return "No GenBank IDs found for the selected family.", []
 
-    # Save the FASTA sequences to the temp directory
-    fasta_file_temp = "/workspace/cazy_analysis/input/temp/family_sequences.fasta"
-    downloader.obtener_fasta_ncbi(output_file=fasta_file_temp)
+    downloader.obtener_fasta_ncbi(output_file=fasta_family)
 
-    # Step 2: Handle the upload of the external file if provided
-    external_fasta_file = None  # Initialize the variable
-
+    # Paso 2: Manejar archivo externo (si existe)
+    external_files = []
     if external_fasta_contents:
         content_type, content_string = external_fasta_contents.split(",")
-        decoded = base64.b64decode(content_string)
-        external_fasta_file = (
-            "/workspace/cazy_analysis/input/temp/external_sequences.fasta"
-        )
+        with open(fasta_external, "wb") as f:
+            f.write(base64.b64decode(content_string))
+        external_files.append(fasta_external)
 
-        with open(external_fasta_file, "wb") as f:
-            f.write(decoded)
-
-    # Step 3: Handle the text input for sequences
+    # Paso 3: Manejar secuencia ingresada como texto
     if input_sequence_text:
-        input_sequence_file = "/workspace/cazy_analysis/input/temp/input_sequence.fasta"
-        with open(input_sequence_file, "w") as f:
+        with open(fasta_input, "w") as f:
             f.write(input_sequence_text)
+        external_files.append(fasta_input)
 
-        # Set the external fasta file to the input sequence file
-        external_fasta_file = input_sequence_file
-
-    # Step 4: Combine the FASTA files
-    combined_fasta_file = "/workspace/cazy_analysis/input/temp/updated_sequences.fasta"
-
-    # Ensure the temp directory exists
-    temp_dir = os.path.dirname(combined_fasta_file)
-    os.makedirs(
-        temp_dir, exist_ok=True
-    )  # Create the temp directory if it doesn't exist
-
-    with open(combined_fasta_file, "w") as outfile:
-        # Write the family sequences
-        with open(fasta_file_temp) as infile:
+    # Paso 4: Combinar todos los archivos en uno solo
+    with open(fasta_combined, "w") as outfile:
+        with open(fasta_family, "r") as infile:
             outfile.write(infile.read())
             outfile.write("\n")
+        for ext_file in external_files:
+            if os.path.exists(ext_file):
+                with open(ext_file, "r") as infile:
+                    outfile.write(infile.read())
+                    outfile.write("\n")
 
-        # If an external fasta file exists, write its content
-        if external_fasta_file and os.path.exists(external_fasta_file):
-            with open(external_fasta_file) as infile:
-                outfile.write(infile.read())
-                outfile.write("\n")
-
-    # Update the downloader with the combined sequences
-    downloader.agregar_secuencia_externa(
-        external_fasta_file, output_file=combined_fasta_file
-    )
-
-    # Step 5: Update dropdown options with new sequences
+    # Actualizar secuencias cargadas desde el archivo combinado
+    #downloader.agregar_secuencia_externa(fasta_combined, output_file=fasta_combined)
     loaded_sequences = downloader.get_loaded_sequences()
 
-    # Debug: Print loaded sequences to check their format
-    # print("Loaded sequences:", loaded_sequences)
-
-    # Extract only the sequence IDs from the loaded sequences
+    # Crear opciones para el dropdown
     options = []
     for seq in loaded_sequences:
-        # Split the sequence on spaces and take the first part (the ID)
-        seq_id = seq.split()[0]  # This should give us the ID including '>'
+        seq_id = seq.split()[0]
         if seq_id.startswith(">"):
-            seq_id = seq_id[1:]  # Remove the '>' character
+            seq_id = seq_id[1:]
         options.append({"label": seq_id, "value": seq_id})
 
-    # Show different messages depending on whether an external sequence was uploaded
-    status_message = "File/sequence uploaded and combined successfully."
+    status_message = "Sequences loaded successfully."
+    if external_files:
+        status_message += " External sequences included."
 
     return status_message, options
 
@@ -203,7 +185,7 @@ def run_blast_callback(n_clicks, selected_sequences, external_fasta_contents, in
     if df_blast is not None and not df_blast.empty:
         # Filtrar el DataFrame basado en las secuencias seleccionadas y el porcentaje de identidad
         if selected_sequences:
-            filtered_df = df_blast[df_blast['query_id'].isin(selected_sequences) & (df_blast['identity'] > 60)]
+            filtered_df = df_blast[df_blast['query_id'].isin(selected_sequences) & (df_blast['identity'] > 50)]
         else:
             filtered_df = df_blast  # No filtrar si no se seleccionan secuencias
 
@@ -322,7 +304,7 @@ def generate_network(n_clicks, blast_results, selected_sequences):
     analyzed_df = nb.analyze_blast_results(df_blast)
 
     # Build the network
-    network = nb.build_network(analyzed_df, threshold=60)
+    network = nb.build_network(analyzed_df, threshold=50)
 
     # Prepare elements for Cytoscape
     elements = []

@@ -63,7 +63,7 @@ class CazyDownloader:
                         if first_valid_id not in self.genbank_ids:
                             self.genbank_ids.append(first_valid_id)
 
-        self._print(f"GenBank IDs obtenidos: {self.genbank_ids}")
+        #self._print(f"GenBank IDs obtenidos: {self.genbank_ids}")
         self._print(f"GenBank IDs obtenidos ({len(self.genbank_ids)}): {self.genbank_ids}")
         return self.genbank_ids
 
