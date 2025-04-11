@@ -304,7 +304,7 @@ def generate_network(n_clicks, blast_results, selected_sequences):
     analyzed_df = nb.analyze_blast_results(df_blast)
 
     # Build the network
-    network = nb.build_network(analyzed_df, threshold=50)
+    network = nb.build_network(analyzed_df, selected_sequences, threshold=50)
 
     # Prepare elements for Cytoscape
     elements = []

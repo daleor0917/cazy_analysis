@@ -41,17 +41,22 @@ class NetworkBuilder:
         result_df = df[["query_id", "subject_id", "identity"]]
         return result_df
 
-    def build_network(self, result_df, threshold=30):
+    def build_network(self, result_df, selected_sequences, threshold=30):
         """
-        Construye un grafo a partir de los resultados de BLAST.
+        Build a graph from BLAST results, focusing on selected sequences.
 
-        :param result_df: DataFrame con los resultados de BLAST.
-        :param threshold: Porcentaje mínimo de identidad para establecer un enlace.
-        :return: Grafo de NetworkX.
+        :param result_df: DataFrame with BLAST results.
+        :param selected_sequences: List of selected query sequences.
+        :param threshold: Minimum identity percentage to establish a link.
+        :return: NetworkX graph.
         """
         G = nx.Graph()
 
-        for _, row in result_df.iterrows():
+        # Filter the DataFrame for selected sequences
+        filtered_df = result_df[result_df['query_id'].isin(selected_sequences)]
+
+        # Create edges between selected sequences and their subjects
+        for _, row in filtered_df.iterrows():
             query = row["query_id"]
             subject = row["subject_id"]
             identity = row["identity"]
@@ -59,7 +64,32 @@ class NetworkBuilder:
             if query != subject and identity >= threshold:
                 G.add_edge(query, subject, weight=identity)
 
+        # Create edges between subjects based on shared queries
+        subjects = filtered_df['subject_id'].unique()
+        for i in range(len(subjects)):
+            for j in range(i + 1, len(subjects)):
+                subject1 = subjects[i]
+                subject2 = subjects[j]
+
+                # Find common queries between subject1 and subject2
+                common_queries = filtered_df[
+                    (filtered_df['subject_id'] == subject1) | 
+                    (filtered_df['subject_id'] == subject2)
+                ]['query_id'].unique()
+
+                # Calculate the average identity for the common queries
+                identities = result_df[
+                    result_df['query_id'].isin(common_queries) & 
+                    ((result_df['subject_id'] == subject1) | (result_df['subject_id'] == subject2))
+                ]
+
+                if not identities.empty:
+                    avg_identity = identities['identity'].mean()
+                    if avg_identity >= threshold:
+                        G.add_edge(subject1, subject2, weight=avg_identity)
+
         return G
+
 
     def visualize_network(self, G):
         """
