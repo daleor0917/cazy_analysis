@@ -1,2 +1,3 @@
-image:
-  file: Dockerfile
+
+tasks:
+  - init: ./init.sh

@@ -8,3 +8,6 @@ black==25.1.0
 beautifulsoup4
 dash-cytoscape==0.2.0
 dash-bootstrap-components==1.7.1
+nf-core
+ete3
+PyQt5
