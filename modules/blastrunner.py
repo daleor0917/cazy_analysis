@@ -9,26 +9,27 @@ import hashlib
 TQ_VERBOSE = os.getenv("TQ_VERBOSE", "F").lower().startswith("t")
 TQ_CACHE = os.getenv("TQ_CACHE", "F").lower().startswith("t")
 
-
 class BLASTrunner:
-
     def __init__(
         self,
-        base_dir="/workspace/cazy_analysis/output",
+        input_fasta,
+        output_dir="output/blast",
         verbose=TQ_VERBOSE,
         cache=TQ_CACHE,
     ):
+        self.input_fasta = input_fasta
         self.verbose = verbose
         self.cache = cache
-        self.base_dir = base_dir
-        self.output_dir_db = os.path.join(self.base_dir, "data_base")
-        self.output_dir = os.path.join(self.base_dir, "blast_output")
-        self.cache_dir = os.path.join(self.base_dir, "cache")
+        self.output_dir = output_dir
+        self.output_dir_db = os.path.join(self.output_dir, "data_base")
+        self.output_dir_results = os.path.join(self.output_dir, "blast_results")
+        self.cache_dir = os.path.join(self.output_dir, "cache")
         self.md5_cache = {}  # Dictionary to store MD5 hashes
 
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(self.output_dir_db, exist_ok=True)
-        os.makedirs(self.cache_dir, exist_ok=True)  
+        os.makedirs(self.output_dir_results, exist_ok=True)
+        os.makedirs(self.cache_dir, exist_ok=True)
 
     def read_input(self, input_file):
         if self.verbose:
@@ -63,8 +64,8 @@ class BLASTrunner:
             print(f"Error: {e}")
             return None, None
 
-    def make_blast_db(self, input_file, dbtype="prot", output_db="mi_base_de_datos"):
-        input_sequences = self.read_input(input_file)
+    def make_blast_db(self, dbtype="prot", output_db="mi_base_de_datos"):
+        input_sequences = self.read_input(self.input_fasta)
 
         if input_sequences is None:
             print("Error: No se pudo leer el archivo de entrada.")
@@ -73,7 +74,7 @@ class BLASTrunner:
         command = [
             "makeblastdb",
             "-in",
-            input_file,
+            self.input_fasta,
             "-dbtype",
             dbtype,
             "-out",
@@ -88,9 +89,9 @@ class BLASTrunner:
         else:
             print("Error updating BLAST database:", result.stderr)
 
-    def run_blastp(self, input_file, database_prefix, output_file):
+    def run_blastp(self, database_prefix, output_file):
         # Read input and get sequences and MD5 hash
-        input_sequences, md5_hash = self.read_input(input_file)
+        input_sequences, md5_hash = self.read_input(self.input_fasta)
         print(f"Current MD5: {md5_hash}")
 
         if input_sequences is None:
@@ -98,7 +99,7 @@ class BLASTrunner:
             return
 
         # Define the cache file path
-        cache_file = os.path.join(self.cache_dir, os.path.basename(input_file) + ".md5")
+        cache_file = os.path.join(self.cache_dir, os.path.basename(self.input_fasta) + ".md5")
 
         # Check if cache is enabled and if the MD5 hash is the same
         if self.cache:
@@ -106,18 +107,18 @@ class BLASTrunner:
             if os.path.exists(cache_file):
                 with open(cache_file, "r") as f:
                     cached_md5 = f.read().strip()
-                    self.md5_cache[input_file] = cached_md5  # Store in the cache dictionary
+                    self.md5_cache[self.input_fasta] = cached_md5  # Store in the cache dictionary
                 if cached_md5 == md5_hash:
                     print("No need to execute BLASTP, file is the same.")
                     return
 
         if self.verbose:
-            print(f"Running BLASTP with input file: {input_file} and database: {database_prefix}")
+            print(f"Running BLASTP with input file: {self.input_fasta} and database: {database_prefix}")
 
         command = [
             "blastp",
             "-query",
-            input_file,
+            self.input_fasta,
             "-db",
             database_prefix,
             "-out",
@@ -136,7 +137,7 @@ class BLASTrunner:
             # Save the current MD5 hash to the cache file
             with open(cache_file, "w") as f:
                 f.write(md5_hash)
-            self.md5_cache[input_file] = md5_hash  # Update the cache dictionary
+            self.md5_cache[self.input_fasta] = md5_hash  # Update the cache dictionary
         else:
             print("Error running BLASTP.", result.stderr)
             return None
@@ -179,14 +180,15 @@ class BLASTrunner:
 
 
 if __name__ == "__main__":
-    BLAST = BLASTrunner(verbose=TQ_VERBOSE, cache=TQ_CACHE)
+    input_fasta = "/workspace/cazy_analysis/input/mis_GH51.txt"
+    output_dir = "modules/output/blast"
+    BLAST = BLASTrunner(input_fasta, output_dir, verbose=TQ_VERBOSE, cache=TQ_CACHE)
 
-    input_file = "/workspace/cazy_analysis/input/5_seq.txt"
-    database_prefix = "/workspace/cazy_analysis/output/data_base/mi_base_de_datos"
-    output_file = "/workspace/cazy_analysis/output/blast_output/blast_results.txt"
+    database_prefix = os.path.join(output_dir, "data_base/mi_base_de_datos")
+    output_file = os.path.join(output_dir, "blast_results/blast_results.txt")
 
     # Crear la base de datos BLAST
-    BLAST.make_blast_db(input_file)
+    BLAST.make_blast_db()
 
     # Ejecutar BLASTP
-    BLAST.run_blastp(input_file, database_prefix, output_file)
+    BLAST.run_blastp(database_prefix, output_file)
