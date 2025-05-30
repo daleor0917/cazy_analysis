@@ -1,0 +1,3 @@
+[submodule "nf-core-cazyanalysis"]
+	path = nf-core-cazyanalysis
+	url = https://github.com/daleor0917/cazy_analysis

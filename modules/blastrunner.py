@@ -13,7 +13,7 @@ class BLASTrunner:
     def __init__(
         self,
         input_fasta,
-        output_dir="output/blast",
+        output_dir="/workspace/cazy_analysis/modules/output/blast",
         verbose=TQ_VERBOSE,
         cache=TQ_CACHE,
     ):
@@ -26,6 +26,7 @@ class BLASTrunner:
         self.cache_dir = os.path.join(self.output_dir, "cache")
         self.md5_cache = {}  # Dictionary to store MD5 hashes
 
+        # Ensure the directories are created correctly
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(self.output_dir_db, exist_ok=True)
         os.makedirs(self.output_dir_results, exist_ok=True)
@@ -181,7 +182,7 @@ class BLASTrunner:
 
 if __name__ == "__main__":
     input_fasta = "/workspace/cazy_analysis/input/mis_GH51.txt"
-    output_dir = "modules/output/blast"
+    output_dir = "/workspace/cazy_analysis/modules/output/blast"
     BLAST = BLASTrunner(input_fasta, output_dir, verbose=TQ_VERBOSE, cache=TQ_CACHE)
 
     database_prefix = os.path.join(output_dir, "data_base/mi_base_de_datos")

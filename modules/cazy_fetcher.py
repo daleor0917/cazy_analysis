@@ -4,6 +4,7 @@
 import os
 import re
 import requests
+import argparse
 from bs4 import BeautifulSoup
 from Bio import Entrez
 
@@ -49,8 +50,7 @@ class CazyFetcher:
         return self.genbank_ids
 
     def obtener_fasta_ncbi(self, output_file="sequences.fasta"):
-        output_path = os.path.join(self.output_dir, output_file)
-        with open(output_path, "w") as fasta_file:
+        with open(output_file, "w") as fasta_file:
             for genbank_id in self.genbank_ids:
                 try:
                     handle = Entrez.efetch(db="protein", id=genbank_id, rettype="fasta", retmode="text")
@@ -65,12 +65,22 @@ class CazyFetcher:
                 except Exception as e:
                     self._print(f"Error con {genbank_id}: {e}")
 
-# Ejemplo de uso
-if __name__ == "__main__":
-    familias = ["GH62", "GH180"]  # Lista de familias
-    email = "daleor0917@gmail.com"
+def main():
+    parser = argparse.ArgumentParser(description='Fetch CAZy family sequences')
+    parser.add_argument('--family', required=True, help='CAZy family name (e.g., GH62)')
+    parser.add_argument('--output', required=True, help='Output file name')
+    parser.add_argument('--email', default='daleor0917@gmail.com', help='Email for NCBI')
+    
+    args = parser.parse_args()
+    
+    # Crear el fetcher con una sola familia
+    familias = [args.family]
+    email = args.email
     verbose = os.getenv("TQ_VERBOSE", "F").lower().startswith("t")
+    
     fetcher = CazyFetcher(email, familias, verbose=verbose)
-
     fetcher.obtener_genbank_ids()
-    fetcher.obtener_fasta_ncbi()
+    fetcher.obtener_fasta_ncbi(args.output)
+
+if __name__ == "__main__":
+    main()
